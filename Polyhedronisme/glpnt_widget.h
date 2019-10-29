@@ -18,6 +18,9 @@ protected:
   void paintGL() override;
 
 private:
+  typedef vector<Vertexes> Mesh;
+  enum { e_vertex, e_normal, e_color };
+
   vector<int> triangularize(int nSides, int offset=0);
   void calc_mesh(Polyhedron *poly);
 
@@ -26,7 +29,8 @@ public:
 
   void set_poly(Polyhedron *poly);
 
-  Vertexes vertexes, normals, colors;
+  Mesh mesh = Mesh(3);
+  int n_vertex = 0;
 };
 
 #endif // GLPNT_WIDGET_H

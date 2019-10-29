@@ -121,7 +121,7 @@ void gl_widget::paintGL() {
     program.setUniformValue("mvp_matrix", projection * mvp_matrix);
 
     // draw mesh in buffers
-    glDrawArrays(GL_TRIANGLES, 0, vertexes.size());
+    glDrawArrays(GL_TRIANGLES, 0, n_vertex);
   }
 }
 
@@ -140,9 +140,8 @@ vector<int> gl_widget::triangularize(
 
 void gl_widget::calc_mesh(Polyhedron *poly) { // create trigs of vertex
 
-  vertexes.clear();
-  normals.clear();
-  colors.clear();
+  mesh.clear(); // init the mesh
+  mesh = Mesh(3);
 
   map<int, vector<int>> trig_map; // map of trigs
 
@@ -158,12 +157,13 @@ void gl_widget::calc_mesh(Polyhedron *poly) { // create trigs of vertex
     auto normal = poly->get_normal(iface);
 
     for (auto ixv : trig_map[fs]) { // set vertex, colors & normals for face
-      vertexes.push_back(poly->vertexes[face[ixv]]);
-
-      colors.push_back(color);
-      normals.push_back(normal);
+      mesh[e_vertex].push_back(poly->vertexes[face[ixv]]);
+      mesh[e_normal].push_back(normal);
+      mesh[e_color].push_back(color);
     }
   }
+
+  n_vertex = mesh[e_vertex].size();
 }
 
 void gl_widget::set_poly(Polyhedron *poly) {
@@ -175,8 +175,7 @@ void gl_widget::set_poly(Polyhedron *poly) {
   calc_mesh(poly); // & vertices, normals, colors -> this->poly
 
   buffers->attributes(&program); // set mesh shader attributes
-  buffers->transfer(vertexes.size(), vertexes.data(), normals.data(),
-                    colors.data()); // transfer
+  buffers->transfer(mesh);       // transfer
 
   update();
 }

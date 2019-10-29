@@ -8,15 +8,7 @@ void glpnt_widget::set_poly(Polyhedron *poly) {
 
   calc_mesh(poly);
 
-  glEnableClientState(GL_VERTEX_ARRAY);
-  glEnableClientState(GL_NORMAL_ARRAY);
-  glEnableClientState(GL_COLOR_ARRAY);
-
-  glVertexPointer(3, GL_FLOAT, sizeof(Vertex), vertexes.data());
-  glNormalPointer(GL_FLOAT, sizeof(Vertex), normals.data());
-  glColorPointer(3, GL_FLOAT, sizeof(Vertex), colors.data());
-
-  repaint();
+  update();
 }
 
 vector<int> glpnt_widget::triangularize(
@@ -35,16 +27,15 @@ vector<int> glpnt_widget::triangularize(
 void glpnt_widget::calc_mesh(
     Polyhedron *poly) { // -> create trigs of vertexes, normals, colors
 
-  vertexes.clear();
-  normals.clear();
-  colors.clear();
+  mesh.clear();
+  mesh = Mesh(3);
 
   map<int, vector<int>> trig_map; // trig map -> don't recalc trigs
 
   for (int iface = 0; iface < poly->faces.size(); iface++) {
 
-    auto face = poly->faces[iface];
-    int fs = int(face.size());
+    auto &face = poly->faces[iface];
+    int fs = face.size();
 
     if (trig_map.find(fs) == trig_map.end()) // new -> calc & use
       trig_map[fs] = triangularize(fs);
@@ -53,10 +44,10 @@ void glpnt_widget::calc_mesh(
     auto normal = poly->get_normal(iface);
 
     for (auto ixv : trig_map[fs]) { // set colors & normals for face vertex
-      vertexes.push_back(poly->vertexes[face[ixv]]);
+      mesh[e_vertex].push_back(poly->vertexes[face[ixv]]);
 
-      colors.push_back(color);
-      normals.push_back(normal);
+      mesh[e_color].push_back(color);
+      mesh[e_normal].push_back(normal);
     }
   }
 }
@@ -70,10 +61,6 @@ void glpnt_widget::initializeGL() {
   glEnable(GL_DEPTH_TEST); // Enable depth buffer
   glDepthFunc(GL_LEQUAL);
   glHint(GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
-
-  glEnableClientState(GL_VERTEX_ARRAY);
-  glEnableClientState(GL_NORMAL_ARRAY);
-  glEnableClientState(GL_COLOR_ARRAY);
 }
 
 void perspectiveGL(GLdouble fovY, GLdouble aspect, GLdouble zNear,
@@ -97,6 +84,22 @@ void glpnt_widget::paintGL() {
 
   glTranslatef(0, 0, -4);
 
-  if (vertexes.size())
-    glDrawArrays(GL_TRIANGLES, 0, vertexes.size());
+  if (mesh[e_vertex].size()) {
+    static vector<int> array_type = {GL_VERTEX_ARRAY, GL_NORMAL_ARRAY, GL_COLOR_ARRAY};
+
+    for (auto &s : array_type) // enable
+      glEnableClientState(s);
+
+    // set data pointers
+    glVertexPointer(3, GL_FLOAT, sizeof(Vertex), mesh[e_vertex].data());
+    glNormalPointer(GL_FLOAT, sizeof(Vertex), mesh[e_normal].data());
+    glColorPointer(3, GL_FLOAT, sizeof(Vertex), mesh[e_color].data());
+
+    // draw
+    glDrawArrays(GL_TRIANGLES, 0, mesh[e_vertex].size());
+
+    // disable
+    for (auto &s : array_type)
+      glDisableClientState(s);
+  }
 }

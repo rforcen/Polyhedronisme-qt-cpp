@@ -41,6 +41,9 @@ public:
   vector<int> triangularize(int nSides, int offset = 0);
 
 private:
+  typedef vector<Vertexes> Mesh;
+  enum { e_vertex, e_normal, e_color };
+
   void initShaders();
 
   QBasicTimer timer;
@@ -69,28 +72,36 @@ private:
         b.destroy();
     }
 
-    void transfer(int n_vertex, Vertex *vertexes, Vertex *normals,
-                  Vertex *colors) { // Transfer vertex data to VBOs
-      vector<Vertex *> mv = {vertexes, normals, colors};
+    Mesh mesh; // local copy of mesh, never use disposable data copy
+
+    void transfer(Mesh mesh) { // Transfer vertex data to VBOs (use local mesh
+                               // -> don't use original vector pointers!!)
+
+      const int sz = mesh[e_vertex].size() * sizeof(Vertex);
+      this->mesh = mesh; // transfer to local copy (deep copy)
+
       for (size_t i = 0; i < buffs.size(); i++) {
         buffs[i].bind();
-        buffs[i].allocate(mv[i], n_vertex * sizeof(Vertex));
+        buffs[i].allocate(this->mesh[i].data(), sz);
       }
     }
 
-    void attributes(QOpenGLShaderProgram *program) {
-      // Tell OpenGL programmable pipeline how to locate vertex position data
+    void attributes(
+        QOpenGLShaderProgram *program) { // Tell OpenGL programmable pipeline
+                                         // how to locate vertex position data
       for (size_t i = 0; i < buffs.size(); i++) {
         buffs[i].bind();
-        int loc = program->attributeLocation(attr_names[i].c_str());
-        if (loc != -1) {
-          program->enableAttributeArray(loc);
-          program->setAttributeBuffer(loc, GL_FLOAT, 0, 3, sizeof(Vertex));
+        int att_loc = program->attributeLocation(attr_names[i].c_str());
+        if (att_loc != -1) {
+          program->enableAttributeArray(att_loc);
+          program->setAttributeBuffer(att_loc, GL_FLOAT, 0, 3, sizeof(Vertex));
         }
       }
     }
   } *buffers = nullptr;
-  Vertexes vertexes, colors, normals;
+
+  Mesh mesh = Mesh(3);
+  int n_vertex = 0;
 };
 
 #endif // GL_WIDGET_H

@@ -77,9 +77,7 @@ public:
     if (!foundAny)
       printf("kisN: No %d-fold components were found.\n", n);
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "k" + (n ? str(n) : "") + poly.name;
-    return newpoly;
+    return flag.topoly("k" + (n ? str(n) : "") + poly.name);
   }
 
   // Ambo
@@ -114,9 +112,7 @@ public:
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "a" + poly.name;
-    return newpoly;
+    return flag.topoly("a" + poly.name);
   }
 
   // Gyro
@@ -152,24 +148,22 @@ public:
         auto sv3 = str(v3);
 
         flag.newV(
-            sv1 + "~" + sv2,
+            sv1 + "-" + sv2,
             oneThird(poly.vertexes[v1], poly.vertexes[v2])); // new v in face
 
         auto fname = si + "f" + sv1;
-        flag.newFlag(fname, "center" + si, sv1 + "~" + sv2); // five new flags
-        flag.newFlag(fname, sv1 + "~" + sv2, sv2 + "~" + sv1);
-        flag.newFlag(fname, sv2 + "~" + sv1, "v" + sv2);
-        flag.newFlag(fname, "v" + sv2, sv2 + "~" + sv3);
-        flag.newFlag(fname, sv2 + "~" + sv3, "center" + si);
+        flag.newFlag(fname, "center" + si, sv1 + "-" + sv2); // five new flags
+        flag.newFlag(fname, sv1 + "-" + sv2, sv2 + "-" + sv1);
+        flag.newFlag(fname, sv2 + "-" + sv1, "v" + sv2);
+        flag.newFlag(fname, "v" + sv2, sv2 + "-" + sv3);
+        flag.newFlag(fname, sv2 + "-" + sv3, "center" + si);
         // shift over one
         v1 = v2;
         v2 = v3;
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "g" + poly.name;
-    return newpoly;
+    return flag.topoly("g" + poly.name);
   }
 
   // Propellor
@@ -197,25 +191,23 @@ public:
         auto sv1 = str(v1), sv2 = str(v2), si = str(i), sv3 = str(v3);
 
         flag.newV(
-            sv1 + "~" + sv2,
+            sv1 + "-" + sv2,
             oneThird(poly.vertexes[v1],
                      poly.vertexes[v2])); // new v in face, 1/3rd along edge
         auto fname = si + "f" + sv2;
-        flag.newFlag("v" + si, sv1 + "~" + sv2,
-                     sv2 + "~" + sv3); // five new flags
-        flag.newFlag(fname, sv1 + "~" + sv2, sv2 + "~" + sv1);
-        flag.newFlag(fname, sv2 + "~" + sv1, "v" + sv2);
-        flag.newFlag(fname, "v" + sv2, sv2 + "~" + sv3);
-        flag.newFlag(fname, sv2 + "~" + sv3, sv1 + "~" + sv2);
+        flag.newFlag("v" + si, sv1 + "-" + sv2,
+                     sv2 + "-" + sv3); // five new flags
+        flag.newFlag(fname, sv1 + "-" + sv2, sv2 + "-" + sv1);
+        flag.newFlag(fname, sv2 + "-" + sv1, "v" + sv2);
+        flag.newFlag(fname, "v" + sv2, sv2 + "-" + sv3);
+        flag.newFlag(fname, sv2 + "-" + sv3, sv1 + "-" + sv2);
         // shift over one
         v1 = v2;
         v2 = v3;
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "p" + poly.name;
-    return newpoly;
+    return flag.topoly("p" + poly.name);
   }
 
   // Reflection
@@ -276,7 +268,11 @@ public:
       }
     }
 
-    auto dpoly = flag.topoly(); // build topological dual from flags
+    auto &pn = poly.name;
+    return flag.topoly(
+        (pn[0] != 'd')
+            ? "d" + pn
+            : pn.substr(1, string::npos)); // build topological dual from flags
 
     // match F index ordering to V index ordering on dual
     // not always working as poly is not planarized
@@ -287,11 +283,6 @@ public:
     //            if (k!=-1) sortF[k] = f;
     //        }
     //        dpoly.set_faces(sortF);
-
-    auto &pn = poly.name;
-    dpoly.name = (pn[0] != 'd') ? "d" + pn : pn.substr(1, string::npos);
-
-    return dpoly;
   }
 
   // Chamfer
@@ -327,13 +318,13 @@ public:
       for (auto &v2 : f) {
         // TODO: figure out what distances will give us a planar hex face.
         // Move each old vertex further from the origin.
-        flag.newV(str(v2), (1.0 + dist) * poly.vertexes[v2]);
+        flag.newV(str(v2), (1.0f + dist) * poly.vertexes[v2]);
         // Add a new vertex, moved parallel to normal.
         auto v2new = str(i) + "_" + str(v2);
 
         auto sv1 = str(v1), sv2 = str(v2), si = str(i);
 
-        flag.newV(v2new, poly.vertexes[v2] + (dist * 1.5 * normals[i]));
+        flag.newV(v2new, poly.vertexes[v2] + (dist * 1.5f * normals[i]));
         // Four new flags:
         // One whose face corresponds to the original face:
         flag.newFlag("orig" + si, v1new, v2new);
@@ -349,9 +340,7 @@ public:
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "c" + poly.name;
-    return newpoly;
+    return flag.topoly("c" + poly.name);
   }
 
   // Whirl
@@ -377,8 +366,8 @@ public:
     // new vertices around center of each face
     auto centers = poly.get_centers();
     // for f,i in poly.face
-    //  # Whirl: use "center"+i+"~"+v1
-    //  flag.newV "center"+i+"~"+v1, unit(centers[i])
+    //  # Whirl: use "center"+i+"-"+v1
+    //  flag.newV "center"+i+"-"+v1, unit(centers[i])
 
     for (size_t i = 0; i < poly.n_faces; i++) {
       auto &f = poly.faces[i];
@@ -392,19 +381,19 @@ public:
 
         // New vertex along edge
         auto v1_2 = oneThird(poly.vertexes[v1], poly.vertexes[v2]);
-        flag.newV(sv1 + "~" + sv2, v1_2);
+        flag.newV(sv1 + "-" + sv2, v1_2);
         // New vertices near center of face
-        auto cv1name = "center" + si + "~" + sv1;
-        auto cv2name = "center" + si + "~" + sv2;
+        auto cv1name = "center" + si + "-" + sv1;
+        auto cv2name = "center" + si + "-" + sv2;
         flag.newV(cv1name, unit(oneThird(centers[i], v1_2)));
 
         auto fname = si + "f" + sv1;
         // New hexagon for each original edge
-        flag.newFlag(fname, cv1name, sv1 + "~" + sv2);
-        flag.newFlag(fname, sv1 + "~" + sv2, sv2 + "~" + sv1); //*
-        flag.newFlag(fname, sv2 + "~" + sv1, "v" + sv2);       //*
-        flag.newFlag(fname, "v" + sv2, sv2 + "~" + sv3);       //*
-        flag.newFlag(fname, sv2 + "~" + sv3, cv2name);
+        flag.newFlag(fname, cv1name, sv1 + "-" + sv2);
+        flag.newFlag(fname, sv1 + "-" + sv2, sv2 + "-" + sv1); //*
+        flag.newFlag(fname, sv2 + "-" + sv1, "v" + sv2);       //*
+        flag.newFlag(fname, "v" + sv2, sv2 + "-" + sv3);       //*
+        flag.newFlag(fname, sv2 + "-" + sv3, cv2name);
         flag.newFlag(fname, cv2name, cv1name);
 
         // New face in center of each old face
@@ -414,9 +403,7 @@ public:
       }
     } // shift over one
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "w" + poly.name;
-    return newpoly;
+    return flag.topoly("w" + poly.name);
   }
 
   // Quinto
@@ -469,9 +456,7 @@ public:
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "q" + poly.name;
-    return newpoly;
+    return flag.topoly("q" + poly.name);
   }
 
   // inset / extrude / "Loft" operator
@@ -491,7 +476,7 @@ public:
     for (size_t i = 0; i < poly.n_faces;
          i++) { // new inset vertex for every vert in face
       auto &f = poly.faces[i];
-      if (f.size() == (size_t)n || n == 0) {
+      if (f.size() == n || n == 0) {
         for (auto &v : f) {
           flag.newV("f" + str(i) + "v" + str(v),
                     tween(poly.vertexes[v], centers[i], inset_dist) +
@@ -508,7 +493,7 @@ public:
         auto v2 = "v" + str(v);
         auto si = str(i);
 
-        if (f.size() == (size_t)n || n == 0) {
+        if (f.size() == n || n == 0) {
           foundAny = true;
           auto fname = si + v1;
           flag.newFlag(fname, v1, v2);
@@ -527,9 +512,7 @@ public:
     if (!foundAny)
       printf("No %d - fold components were found.", n);
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "n" + (n ? str(n) : "") + poly.name;
-    return newpoly;
+    return flag.topoly("n" + (n ? str(n) : "") + poly.name);
   }
 
   // extrudeN
@@ -552,12 +535,14 @@ public:
   // Hollow (skeletonize)
   // ------------------------------------------------------
   static Polyhedron hollow(Polyhedron poly, float inset_dist = 0.5,
-                           float thickness = 0.2) {
+                           float thickness = 0.1) {
+
     auto dualnormals = PolyOperations::dual(poly).avg_normals();
     auto normals = poly.avg_normals();
     auto centers = poly.get_centers();
 
     Polyflag flag;
+
     for (size_t i = 0; i < poly.n_vertex;
          i++) { // each old vertex is a new vertex
       auto p = poly.vertexes[i];
@@ -566,6 +551,7 @@ public:
       flag.newV("v" + si, p);
       flag.newV("downv" + si, p - thickness * dualnormals[i]);
     }
+
     // new inset vertex for every vert in face
     for (size_t i = 0; i < poly.n_faces; i++) {
       auto si = str(i);
@@ -611,9 +597,7 @@ public:
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "H" + poly.name;
-    return newpoly;
+    return flag.topoly("H" + poly.name);
   }
 
   // Perspectiva 1
@@ -639,9 +623,9 @@ public:
       for (auto &v : f) {
         auto v3 = "v" + str(v);
         auto vert3 = poly.vertexes[v];
-        auto v12 = v1 + "~" + v2; // names for "oriented" midpoints
-        auto v21 = v2 + "~" + v1;
-        auto v23 = v2 + "~" + v3;
+        auto v12 = v1 + "-" + v2; // names for "oriented" midpoints
+        auto v21 = v2 + "-" + v1;
+        auto v23 = v2 + "-" + v3;
 
         // on each Nface, N new points inset from edge midpoints towards center
         // = "stellated" points
@@ -669,9 +653,7 @@ public:
       }
     }
 
-    auto newpoly = flag.topoly();
-    newpoly.name = "P" + poly.name;
-    return newpoly;
+    return flag.topoly("P" + poly.name);
   }
   //===================================================================================================
   // Goldberg-Coxeter Operators  (in progress...)
@@ -727,7 +709,7 @@ public:
       for (size_t j = i + 1; j < newVs.size(); j++) {
         auto w = newVs[j];
         if (simd_distance(v, w) < EPSILON_CLOSE)
-          uniqmap[(int)j] = newpos;
+          uniqmap[int(j)] = newpos;
       }
       newpos++;
     }
@@ -772,7 +754,7 @@ private:
     return tween(vec1, vec2, 1 / 3.f);
   }
   static inline Vertex tween(Vertex &vec1, Vertex &vec2, float t) {
-    return (1.f - t) * vec1 + t * vec2;
+    return ((1.f - t) * vec1) + (t * vec2);
   }
   static inline int intersect(Face &set1, Face &set2, Face &set3) {
     for (auto s1 : set1)

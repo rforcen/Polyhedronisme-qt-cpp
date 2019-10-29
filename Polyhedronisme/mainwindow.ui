@@ -7,21 +7,28 @@
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>600</height>
+    <height>621</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Polyhedronisme</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
+   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,0">
     <item>
      <widget class="gl_widget" name="poly_widget"/>
     </item>
     <item>
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>transformations: 'dagprPqkcwnxlH'</string>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="QLineEdit" name="poly_trans">
       <property name="text">
-       <string>aqqD</string>
+       <string>qaaqD</string>
       </property>
      </widget>
     </item>
@@ -43,7 +50,7 @@
   <customwidget>
    <class>gl_widget</class>
    <extends>QOpenGLWidget</extends>
-   <header>gl_widget.h</header>
+   <header location="global">gl_widget.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

@@ -77,7 +77,7 @@ public:
       return p; // wrong base
     }
 
-    for (i++; i < slen; i++) { // transformations
+    for (i++; i < slen; i++) { // transformations: dagprPqkcwnxlH
       switch (s[i]) {
       case 'd':
         p = PolyOperations::dual(p);

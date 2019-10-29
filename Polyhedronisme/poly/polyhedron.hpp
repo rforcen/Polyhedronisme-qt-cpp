@@ -64,7 +64,7 @@ public:
       auto v1 = vertexes[face_len - 2], v2 = vertexes[face_len - 1];
 
       for (auto ic : faces[i]) { // running sum of normal vectors
-        auto &v3 = vertexes[size_t(ic)];
+        auto v3 = vertexes[ic];
         normalV += normal(v1, v2, v3);
         v1 = v2;
         v2 = v3; // shift over one

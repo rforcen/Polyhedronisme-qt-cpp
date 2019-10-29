@@ -21,6 +21,7 @@
 
 const int MAX_FACE_SIDEDNESS = 1000; // GLOBAL
 
+
 class Polyflag {
 
   map<string, map<string, string>>
@@ -41,7 +42,7 @@ public:
     flags[faceName][vertName1] = vertName2;
   }
 
-  Polyhedron topoly() {
+  Polyhedron topoly(string name="unknown polyhedron") {
     Vertexes vertexes(vertidxs.size());
     Faces faces(flags.size());
 
@@ -75,7 +76,7 @@ public:
       }
       ctr++;
     }
-    return Polyhedron("unknown polyhedron", vertexes, faces);
+    return Polyhedron(name, vertexes, faces);
   }
 };
 
