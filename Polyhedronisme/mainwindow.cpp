@@ -24,6 +24,9 @@ void MainWindow::update() {
     ui->statusbar->showMessage(QString::asprintf("# vertex: %ld, # faces: %ld",
                                                  p.n_vertex, p.n_faces));
     ui->poly_widget->set_poly(&p); // render it
+    ui->gl10->set_poly(&p); // render it
+    ui->pnt->set_poly(&p); // render it
+
   }
 }
 

@@ -11,14 +11,7 @@
 #include <QOpenGLWidget>
 #include <QQuaternion>
 
-#include "poly/polyhedron.hpp"
-
-#include <math.h>
-#include <string>
-#include <vector>
-
-using std::string;
-using std::vector;
+#include "mesh.h"
 
 class gl_widget : public QOpenGLWidget, protected QOpenGLFunctions {
   Q_OBJECT
@@ -37,13 +30,8 @@ public:
 
   void set_poly(Polyhedron *poly);
 
-  void calc_mesh(Polyhedron *poly);
-  vector<int> triangularize(int nSides, int offset = 0);
-
 private:
-  typedef vector<Vertexes> Mesh;
-  enum { e_vertex, e_normal, e_color };
-
+  Mesh mesh;
   void initShaders();
 
   QBasicTimer timer;
@@ -59,6 +47,7 @@ private:
   class GLBuffers {
     vector<QOpenGLBuffer> buffs; // coords, normals, colors
     vector<string> attr_names;
+    Mesh mesh; // local copy of mesh, never use disposable data copy
 
   public:
     explicit GLBuffers(vector<string> attr_names) : attr_names(attr_names) {
@@ -72,17 +61,15 @@ private:
         b.destroy();
     }
 
-    Mesh mesh; // local copy of mesh, never use disposable data copy
+    void transfer(Mesh &mesh) { // Transfer vertex data to VBOs (use local mesh
+                                // -> don't use original vector pointers!!)
 
-    void transfer(Mesh mesh) { // Transfer vertex data to VBOs (use local mesh
-                               // -> don't use original vector pointers!!)
-
-      const int sz = mesh[e_vertex].size() * sizeof(Vertex);
+      const int sz = mesh.get_size();
       this->mesh = mesh; // transfer to local copy (deep copy)
 
       for (size_t i = 0; i < buffs.size(); i++) {
         buffs[i].bind();
-        buffs[i].allocate(this->mesh[i].data(), sz);
+        buffs[i].allocate(this->mesh.get_data(i), sz);
       }
     }
 
@@ -91,6 +78,7 @@ private:
                                          // how to locate vertex position data
       for (size_t i = 0; i < buffs.size(); i++) {
         buffs[i].bind();
+
         int att_loc = program->attributeLocation(attr_names[i].c_str());
         if (att_loc != -1) {
           program->enableAttributeArray(att_loc);
@@ -99,9 +87,6 @@ private:
       }
     }
   } *buffers = nullptr;
-
-  Mesh mesh = Mesh(3);
-  int n_vertex = 0;
 };
 
 #endif // GL_WIDGET_H

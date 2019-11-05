@@ -2,13 +2,14 @@
 #define RENDERER_H
 
 #include <QMouseEvent>
+#include <QOpenGLFunctions>
 #include <QOpenGLWidget>
 #include <QTimer>
 
 #include <math.h>
 #include <random>
 
-class Renderer : public QOpenGLWidget {
+class Renderer : public QOpenGLWidget, protected QOpenGLFunctions {
   Q_OBJECT
 
 public:
@@ -20,6 +21,18 @@ public:
   void setRotate(bool doRotate = false) { this->doRotate = doRotate; }
   void sceneInit(QColor = QColor());
   bool doRotate = true;
+
+  std::vector<GLenum> array_type = {GL_VERTEX_ARRAY, GL_NORMAL_ARRAY,
+                                    GL_COLOR_ARRAY};
+
+  void enableClient() {
+    for (auto &s : array_type) // enable
+      glEnableClientState(s);
+  }
+  void disableClient() {
+    for (auto &s : array_type) // disable
+      glDisableClientState(s);
+  }
 
 private slots:
   void repaint();
@@ -49,6 +62,7 @@ protected:
   void mousePressEvent(QMouseEvent *event) override;
   void mouseDoubleClickEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
+
   virtual void draw() = 0;
   virtual void init() = 0;
 };

@@ -1,7 +1,9 @@
 #include "renderer.h"
 
 Renderer::Renderer(QWidget *parent) : QOpenGLWidget(parent) { _init(); }
-void Renderer::_init() { setFPS(15); }
+
+void Renderer::_init() { setFPS(0.f); }
+
 void Renderer::setFPS(float fps) {
   QTimer *timer = new QTimer(this);
   if (fps != 0.f) {
@@ -10,20 +12,27 @@ void Renderer::setFPS(float fps) {
   } else
     timer->stop();
 }
+
 void Renderer::repaint() { update(); }
+
 void Renderer::perspectiveGL(GLdouble fovY, GLdouble aspect, GLdouble zNear,
                              GLdouble zFar) {
   GLdouble fH = tan(fovY / 360. * M_PI) * zNear, fW = fH * aspect;
   glFrustum(-fW, fW, -fH, fH, zNear, zFar);
 }
+
 void Renderer::initializeGL() { // Set up the rendering context, load shaders
                                 // and other resources, etc.:
+  initializeOpenGLFunctions();  // for this context
+
   glClearColor(0, 0, 0, 1);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glHint(GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
+
   init(); // init gl items here
 }
+
 void Renderer::resizeGL(int w, int h) {
   glViewport(0, 0, w, h);
   glMatrixMode(GL_PROJECTION);
@@ -31,10 +40,12 @@ void Renderer::resizeGL(int w, int h) {
   perspectiveGL(45, GLdouble(w) / h, 1, 1000);
   glMatrixMode(GL_MODELVIEW);
 }
+
 void Renderer::mousePressEvent(QMouseEvent *event) {
   m_lastPos = event->pos();
   emit clicked(event);
 }
+
 void Renderer::mouseDoubleClickEvent(QMouseEvent *event) {
   emit doubleClicked(event);
 }
@@ -52,12 +63,14 @@ void Renderer::mouseMoveEvent(QMouseEvent *event) {
   }
   m_lastPos = event->pos();
 }
+
 static void qNormalizeAngle(int &angle) {
   while (angle < 0)
     angle += 360 * 16;
   while (angle > 360 * 16)
     angle -= 360 * 16;
 }
+
 void Renderer::setXRotation(int angle) {
   qNormalizeAngle(angle);
   if (angle != m_xRot) {
@@ -66,6 +79,7 @@ void Renderer::setXRotation(int angle) {
     update();
   }
 }
+
 void Renderer::setYRotation(int angle) {
   qNormalizeAngle(angle);
   if (angle != m_yRot) {
@@ -74,6 +88,7 @@ void Renderer::setYRotation(int angle) {
     update();
   }
 }
+
 void Renderer::setZRotation(int angle) {
   qNormalizeAngle(angle);
   if (angle != m_zRot) {

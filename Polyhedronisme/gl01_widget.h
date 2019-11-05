@@ -4,8 +4,6 @@
 #define GL01_WIDGET_H
 
 #include "renderer.h"
-
-#include <math.h>
 #include <poly/polyhedron.hpp>
 
 class gl01_widget : public Renderer {
@@ -17,6 +15,7 @@ private:
 public:
   gl01_widget(QWidget *parent);
   void draw_poly();
+  void draw_lines();
 
   void draw() override;
   void init() override;
