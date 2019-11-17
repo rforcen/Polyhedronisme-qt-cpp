@@ -26,23 +26,24 @@ SOURCES += \
     glpnt_widget.cpp \
     main.cpp \
     mainwindow.cpp \
-    mesh.cpp \
+    poly/common.cpp \
     poly/johnson.cpp \
-    poly/parser.cpp \
     renderer.cpp
 
 HEADERS += \
+    Timer.h \
     gl01_widget.h \
     gl_widget.h \
     glpnt_widget.h \
     mainwindow.h \
     mesh.h \
+    poly/Thread.h \
     poly/color.hpp \
     poly/common.hpp \
     poly/fastflags.h \
     poly/johnson.hpp \
     poly/parser.hpp \
-    poly/poly_operations.hpp \
+    poly/poly_operations_mt.hpp \
     poly/polyhedron.hpp \
     poly/seeds.hpp \
     renderer.h

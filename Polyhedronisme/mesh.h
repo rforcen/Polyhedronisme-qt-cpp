@@ -1,6 +1,7 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include <poly/common.hpp>
 #include <poly/polyhedron.hpp>
 
 class Mesh {
@@ -29,27 +30,30 @@ public:
     return res;
   }
 
-  Mesh& calc(Polyhedron *poly) { // -> create trigs of vertexes, normals, colors
+  map<int, vector<int>> gen_trigs_map(Polyhedron *poly) {
+    map<int, vector<int>> tm;
+    for (auto &face : poly->faces)
+      if (tm.find(face.size()) == tm.end()) // not found->generate
+        tm[face.size()] = triangularize(face.size());
+    return tm;
+  }
+
+  Mesh &calc(Polyhedron *poly) { // -> create trigs of vertexes, normals, colors
 
     init();
 
-    map<int, vector<int>>
-        trig_map; // trig map -> don't recalc trigs (expensive)
+    auto trig_map = gen_trigs_map(poly);
 
     for (int iface = 0; iface < poly->faces.size(); iface++) {
 
       auto &face = poly->faces[iface];
       int fs = face.size();
 
-      if (trig_map.find(fs) == trig_map.end()) // new -> calc & use
-        trig_map[fs] = triangularize(fs);
-
       auto color = poly->get_color(iface); // current color, normal
       auto normal = poly->get_normal(iface);
 
       for (auto ixv : trig_map[fs]) { // set colors & normals for face vertex
         mesh[e_vertex].push_back(poly->vertexes[face[ixv]]);
-
         mesh[e_color].push_back(color);
         mesh[e_normal].push_back(normal);
       }

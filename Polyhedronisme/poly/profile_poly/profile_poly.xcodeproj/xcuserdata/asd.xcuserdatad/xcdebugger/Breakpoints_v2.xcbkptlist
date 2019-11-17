@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "AEE8CF3C-8735-4C97-A87F-A288527671BE"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "8CF774E1-8B12-44E1-82C6-1F9A67832175"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../parser.hpp"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "74"
+            endingLineNumber = "74"
+            landmarkName = "test_maps()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "1674AF7D-1A58-411B-ACD4-042E58ABB746"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../parser.hpp"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "71"
+            endingLineNumber = "71"
+            landmarkName = "test_maps()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "1674AF7D-1A58-411B-ACD4-042E58ABB746 - a76e1c3223e5c5cb"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Parser::test_maps()"
+                  moduleName = "profile_poly"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/asd/Documents/dev/qt/Polyhedronisme/poly/parser.hpp"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "71"
+                  endingLineNumber = "71"
+                  offsetFromSymbolStart = "754">
+               </Location>
+               <Location
+                  uuid = "1674AF7D-1A58-411B-ACD4-042E58ABB746 - 6d07b34bccffe478"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Parser::test_maps()::&apos;lambda3&apos;()::operator()() const"
+                  moduleName = "profile_poly"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/asd/Documents/dev/qt/Polyhedronisme/poly/parser.hpp"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "72"
+                  endingLineNumber = "72"
+                  offsetFromSymbolStart = "16">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "027F3256-0DE4-4562-B9E3-B94F33AE5DEC"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../parser.hpp"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "68"
+            endingLineNumber = "68"
+            landmarkName = "test_maps()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "027F3256-0DE4-4562-B9E3-B94F33AE5DEC - e679a4d1b0f2fb7b"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Parser::test_maps()::&apos;lambda2&apos;()::operator()() const"
+                  moduleName = "profile_poly"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/asd/Documents/dev/qt/Polyhedronisme/poly/parser.hpp"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "68"
+                  endingLineNumber = "68"
+                  offsetFromSymbolStart = "16">
+               </Location>
+               <Location
+                  uuid = "027F3256-0DE4-4562-B9E3-B94F33AE5DEC - e679a4d1b0f2fb7b"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Parser::test_maps()::&apos;lambda2&apos;()::operator()() const"
+                  moduleName = "profile_poly"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/asd/Documents/dev/qt/Polyhedronisme/poly/parser.hpp"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "68"
+                  endingLineNumber = "68"
+                  offsetFromSymbolStart = "82">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "B9A04C0B-D6E3-41E8-8B7B-E404DB73A6D4"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../parser.hpp"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "60"
+            endingLineNumber = "60"
+            landmarkName = "test_maps()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "F61AF2C1-9A3D-49B1-8594-EBD4F0BD3ED6"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../parser.hpp"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "56"
+            endingLineNumber = "56"
+            landmarkName = "test_maps()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

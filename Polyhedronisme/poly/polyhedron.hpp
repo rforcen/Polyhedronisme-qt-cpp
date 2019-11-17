@@ -9,6 +9,7 @@
 #ifndef polyhedron_hpp
 #define polyhedron_hpp
 
+#include "Thread.h"
 #include "color.hpp"
 #include "common.hpp"
 
@@ -18,7 +19,9 @@ public:
   Polyhedron(const string name, const Vertexes vertexes, const Faces faces)
       : name(name), vertexes(vertexes), faces(faces), n_vertex(vertexes.size()),
         n_faces(faces.size()) {}
-  Polyhedron(const string name, const VertexesFloat vertexes, const Faces faces)
+
+  Polyhedron(const string name, const VertexesFloat vertexes,
+             const vector<vector<int>> faces)
       : name(name), faces(faces), n_vertex(vertexes.size()),
         n_faces(faces.size()) {
 
@@ -26,11 +29,12 @@ public:
       this->vertexes.push_back(Vertex{v[0], v[1], v[2]});
   }
 
-  void recalc() {
+  Polyhedron recalc() {
     calc_normals();
     calc_areas();
     calc_centers();
     calc_colors();
+    return *this;
   }
 
   void scale_vertexes() {
@@ -47,14 +51,47 @@ public:
 
   void calc_normals() { // per face
     normals = Vertexes(n_faces);
+    Thread(n_faces).run([this](int f) {
+      normals[f] = calc_normal(vertexes[faces[f][0]], vertexes[faces[f][1]],
+                               vertexes[faces[f][2]]);
+    });
+  }
+
+  void calc_normals_st() { // per face
+    normals = Vertexes(n_faces);
     for (size_t f = 0; f < n_faces; f++)
-      normals[f] = calc_normal(vertexes[size_t(faces[f][0])],
-                               vertexes[size_t(faces[f][1])],
-                               vertexes[size_t(faces[f][2])]);
+      normals[f] = calc_normal(vertexes[faces[f][0]], vertexes[faces[f][1]],
+                               vertexes[faces[f][2]]);
+  }
+
+  int count_points() { // count # of vertex used in all faces
+    int np = 0;
+    for (auto &face : faces)
+      np += face.size();
+    return np;
   }
 
   // calculate average normal vector for array of vertices
   Vertexes avg_normals() {
+    auto normals = Vertexes(n_faces);
+
+    Thread(n_faces).run([this, &normals](int i) {
+      size_t face_len = faces[i].size();
+      Vertex normalV = 0;
+      auto v1 = vertexes[face_len - 2], v2 = vertexes[face_len - 1];
+
+      for (auto ic : faces[i]) { // running sum of normal vectors
+        auto v3 = vertexes[ic];
+        normalV += normal(v1, v2, v3);
+        v1 = v2;
+        v2 = v3; // shift over one
+      }
+      normals[i] = unit(normalV);
+    });
+    return normals;
+  }
+
+  Vertexes avg_normals_st() {
     auto normals = Vertexes(n_faces);
 
     for (size_t i = 0; i < n_faces; i++) {
@@ -76,12 +113,24 @@ public:
 
   void calc_centers() { // per face
     centers = Vertexes(n_faces);
-    for (size_t f = 0; f < n_faces; f++) {
+    Thread(n_faces).run([this](int f) {
       Vertex fcenter = 0;
-      Face &face = faces[f];
+      Face face = faces[f];
       // average vertex coords
       for (size_t ic = 0; ic < face.size(); ic++)
-        fcenter += vertexes[size_t(face[ic])];
+        fcenter += vertexes[face[ic]];
+      centers[f] =
+          fcenter / face.size(); //  return face - ordered array  of  centroids
+    });
+  }
+  void calc_centers_st() { // per face
+    centers = Vertexes(n_faces);
+    for (size_t f = 0; f < n_faces; f++) {
+      Vertex fcenter = 0;
+      Face face = faces[f];
+      // average vertex coords
+      for (size_t ic = 0; ic < face.size(); ic++)
+        fcenter += vertexes[face[ic]];
       centers[f] =
           fcenter / face.size(); //  return face - ordered array  of  centroids
     }
@@ -89,17 +138,32 @@ public:
 
   void calc_areas() { // per face
     areas = vector<float>(n_faces);
-    for (size_t f = 0; f < n_faces; f++) {
+    Thread(n_faces).run([this](int f) {
       auto &face = faces[f];
       simd_float3 vsum = 0;
       auto fl = face.size();
-      Vertex v1 = vertexes[size_t(face[fl - 2])],
-             v2 = vertexes[size_t(face[fl - 1])];
+      Vertex v1 = vertexes[face[fl - 2]], v2 = vertexes[face[fl - 1]];
 
       for (size_t ic = 0; ic < fl; ic++) {
         vsum += simd::cross(v1, v2);
         v1 = v2;
-        v2 = vertexes[size_t(face[ic])];
+        v2 = vertexes[face[ic]];
+      }
+      areas[f] = abs(simd::dot(normals[f], vsum)) / 2;
+    });
+  }
+  void calc_areas_st() { // per face
+    areas = vector<float>(n_faces);
+    for (size_t f = 0; f < n_faces; f++) {
+      auto &face = faces[f];
+      simd_float3 vsum = 0;
+      auto fl = face.size();
+      Vertex v1 = vertexes[face[fl - 2]], v2 = vertexes[face[fl - 1]];
+
+      for (size_t ic = 0; ic < fl; ic++) {
+        vsum += simd::cross(v1, v2);
+        v1 = v2;
+        v2 = vertexes[face[ic]];
       }
       areas[f] = abs(simd::dot(normals[f], vsum)) / 2;
     }
@@ -124,15 +188,15 @@ public:
   Vertex centroid(Face &face) {
     Vertex centroid = 0; // calc centroid of face
     for (auto ic : face)
-      centroid += vertexes[size_t(ic)];
+      centroid += vertexes[ic];
     return centroid /= face.size();
   }
 
   // sets
-  void set_faces(Faces &faces) {
-    this->faces = faces;
-    this->n_faces = faces.size();
-  }
+  //  void set_faces(Faces &faces) {
+  //    this->faces = faces;
+  //    this->n_faces = faces.size();
+  //  }
 
   // gets
   string get_name() { return name; }
@@ -161,10 +225,10 @@ public:
   }
 
   Vertex get_color(int face) { // get face color according to face area
-    return colors[size_t(face)];
+    return colors[face];
   }
 
-  Vertex get_normal(int face) { return normals[size_t(face)]; }
+  Vertex get_normal(int face) { return normals[face]; }
 
   void set_colors(Vertexes &colors) { this->colors = colors; }
 
@@ -195,10 +259,11 @@ public:
     printf("vertices: %ld\n", vertexes.size());
     printf("faces   : %ld\n", faces.size());
 
-    for (auto &face : faces) // traverse vertexes
+    for (int i = 0; i < faces.size(); i++) {
+      auto face = faces[i]; // traverse vertexes
       for (auto ixc : face)
-        vertexes[size_t(ixc)];
-
+        vertexes[ixc];
+    }
     puts("traverse ok");
   }
 
@@ -214,7 +279,8 @@ public:
 
     printf("\nfaces %ld\n", faces.size());
     int iface = 0;
-    for (auto face : faces) {
+    for (int i = 0; i < faces.size(); i++) {
+      auto face = faces[i];
       printf("%d:(", iface++);
       for (auto ic : face)
         printf("%d ", ic);
@@ -265,10 +331,10 @@ private:
   int sigfigs(
       float f,
       int nsigs = 2) { // returns string w. nsigs digits ignoring magnitude
-    if (f == 0)
+    if (f == 0.f)
       return 0;
     float mantissa = f / powf(10, floor(log10f(f)));
-    return roundf(mantissa * powf(10, (nsigs - 1)));
+    return int(roundf(mantissa * powf(10, (nsigs - 1))));
   }
 };
 

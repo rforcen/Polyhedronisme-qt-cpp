@@ -10,6 +10,8 @@
 #define poly_operations_hpp
 
 #include "common.hpp"
+
+#include "Thread.h"
 #include "fastflags.h"
 #include "polyhedron.hpp"
 
@@ -31,6 +33,7 @@
 // set name as appropriate
 
 class PolyOperations {
+
 public:
   // Kis(N)
   // ------------------------------------------------------
@@ -40,91 +43,95 @@ public:
   //
   static Polyhedron kisN(Polyhedron &poly, int n = 0, float apexdist = 0.1f) {
 
-    Flag flag;
-
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
+    int nth = Thread::getnthreads();
+    vector<Flag> flags(nth);
 
     auto normals = poly.get_normals();
     auto centers = poly.get_centers();
 
     bool foundAny = false;
 
-    // create vertex map
-    auto n_vertex = flag.add_vertexes(poly.vertexes);
-
     // create face map
-    for (size_t nface = 0; nface < poly.n_faces; nface++) {
+    Thread(poly.n_faces)
+        .run([&flags, &poly, &foundAny, n, apexdist, &centers,
+              &normals](int t, int nface) {
+          Flag &flag = flags[t];
+          auto &face = poly.faces[nface];
+          auto fname = i4('f', nface);
 
-      auto &face = poly.faces[nface];
-      int v1 = face.back();
+          int v1 = face.back();
 
-      for (auto v2 : face) {
+          for (auto v2 : face) {
 
-        if (face.size() == n || n == 0) {
-          foundAny = true;
+            auto iv2 = i4(v2);
 
-          vm[i4(n_vertex + nface)] =
-              flag.vtx_index(centers[nface] + (normals[nface] * apexdist));
+            flag.add_vertex(iv2, poly.vertexes[v2]); // poly.vtx
 
-          mp[i4(nface, v1)][i4(v1)] = i4(v2);
-          mp[i4(nface, v1)][i4(v2)] = i4(n_vertex + nface);
-          mp[i4(nface, v1)][i4(n_vertex + nface)] = i4(v1);
+            if (face.size() == n || n == 0) {
+              foundAny = true;
 
-        } else {
-          mp[i4(nface)][i4(v1)] = i4(v2);
-        }
+              flag.add_vertex(fname,
+                              centers[nface] +
+                                  (normals[nface] * apexdist)); // raised center
+              flag.add_face({i4(v1), iv2, fname});
+            } else {
+              flag.add_face({i4(v1), i4(v2)});
+            }
 
-        v1 = v2; // current becomes previous
-      }
-    }
+            v1 = v2; // current becomes previous
+          }
+        });
 
-    if (!foundAny)
-      printf("kisN: No %d-fold components were found.\n", n);
+    // combine flags->flag
+    Flag flag(flags);
 
-    return flag.to_poly("k" + (n ? str(n) : "") + poly.name);
+    return {"k" + (n ? str(n) : "") + poly.name, flag.vertexes, flag.faces};
   }
 
   // Ambo
   // ------------------------------------------------------
   // The best way to think of the ambo operator is as a topological "tween"
   // between a polyhedron and its dual polyhedron.  Thus the ambo of a dual
-  // polyhedron is the same as the ambo of the original. Also called "Rectify".
+  // polyhedron is the same as the ambo of the original. Also called
+  // "Rectify".
   //
 
   static Polyhedron ambo(Polyhedron &poly) {
-    Flag flag;
 
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
+    int nth = Thread::getnthreads();
+    vector<Flag> flags(nth);
 
-    for (int nface = 0; nface < poly.n_faces; nface++) {
+    Thread(poly.n_faces).run([&flags, &poly](int t, int nface) {
+      Flag &flag = flags[t];
       auto &face = poly.faces[nface];
       auto flen = face.size();
 
-      auto v1 = face[flen - 2], v2 = face[flen - 1]; //  [v1, v2] = f.slice(-2);
+      auto v1 = face[flen - 2],
+           v2 = face[flen - 1]; //  [v1, v2,f.slice(-2);
 
-      for (auto &v3 : face) {
+      vector<Int4> f_orig;
+      for (auto v3 : face) {
         auto m12 = i4_min(v1, v2), m23 = i4_min(v2, v3);
 
         if (v1 < v2) // vertices are the midpoints of all edges of original poly
-          vm[m12] =
-              flag.vtx_index(midpoint(poly.vertexes[v1], poly.vertexes[v2]));
+          flag.add_vertex(m12, midpoint(poly.vertexes[v1], poly.vertexes[v2]));
 
         // two new flags:
         // One whose face corresponds to the original f:
-        mp[i4('orig', nface)][m12] = m23;
+        f_orig.push_back(m12);
 
         // Another flag whose face  corresponds to (the truncated) v2:
-        mp[i4('dual', v2)][m23] = m12;
+        flag.add_face(i4('dual', v2), m23, m12);
 
         // shift over one
         v1 = v2;
         v2 = v3;
       }
-    }
+      flag.add_face(f_orig);
+    });
 
-    return flag.to_poly("a" + poly.name);
+    Flag flag(flags);
+    return {"a" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Gyro
@@ -132,28 +139,27 @@ public:
   // This is the dual operator to "snub", i.e dual*Gyro = Snub.  It is a bit
   // easier to implement this way.
   //
-  // Snub creates at each vertex a new face, expands and twists it, and adds two
-  // new triangles to replace each edge.
+  // Snub creates at each vertex a new face, expands and twists it, and adds
+  // two new triangles to replace each edge.
 
   static Polyhedron gyro(Polyhedron &poly) {
-    Flag flag;
-
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
-
-    flag.add_vertexes(poly.vertexes);
 
     Vertexes centers =
         poly.get_centers(); // new vertices in center of each face
 
-    for (size_t i = 0; i < poly.n_faces; i++)
-      vm[i4('cntr', i)] = flag.vtx_index(centers[i]);
+    int nth = Thread::getnthreads(); // one flag per thread
+    vector<Flag> flags(nth);
 
-    for (size_t i = 0; i < poly.n_faces; i++) {
+    Flag flag(poly.vertexes);
+
+    Thread(poly.n_faces).run([&flags, &poly, &centers](int t, int i) {
+      Flag &flag = flags[t];
       auto &f = poly.faces[i];
       auto flen = f.size();
 
-      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2] = f.slice(-2);
+      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2,f.slice(-2);
+
+      flag.add_vertex(i4('cntr', i), centers[i]);
 
       for (size_t j = 0; j < flen; j++) {
         auto sv1 = str(v1), sv2 = str(v2), si = str(i);
@@ -161,24 +167,23 @@ public:
         auto v3 = v;
         auto sv3 = str(v3);
 
-        vm[i4(v1, v2)] = flag.vtx_index(
+        flag.add_vertex(
+            i4(v1, v2),
             oneThird(poly.vertexes[v1], poly.vertexes[v2])); // new v in face
 
-        auto fname = i4(i, 'f', v1); // si + "f" + sv1;
-
-        mp[fname][i4('cntr', i)] = i4(v1, v2); // five new flags
-        mp[fname][i4(v1, v2)] = i4(v2, v1);
-        mp[fname][i4(v2, v1)] = i4(v2);
-        mp[fname][i4(v2)] = i4(v2, v3);
-        mp[fname][i4(v2, v3)] = i4('cntr', i);
+        // 5 new faces
+        flag.add_face(
+            {i4('cntr', i), i4(v1, v2), i4(v2, v1), i4(v2), i4(v2, v3)});
 
         // shift over one
         v1 = v2;
         v2 = v3;
       }
-    }
+    });
 
-    return flag.to_poly("g" + poly.name);
+    flag.combine(flags);
+
+    return {"g" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Propellor
@@ -189,58 +194,47 @@ public:
 
   static Polyhedron propellor(Polyhedron &poly) {
 
-    Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
+    Flag flag(poly.vertexes);
+    vector<Flag> flags(Thread::getnthreads()); // one flag per thread
 
-    flag.add_vertexes(poly.vertexes);
-
-    Vertexes centers =
-        poly.get_centers(); // new vertices in center of each face
-
-    for (size_t i = 0; i < poly.n_faces; i++) {
-
+    Thread(poly.n_faces).run([&flags, &poly](int t, int i) {
+      Flag &flag = flags[t];
       auto &f = poly.faces[i];
       auto flen = f.size();
-      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2] = f.slice(-2);
+      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2,f.slice(-2);
 
-      for (auto &v : f) {
-        auto v3 = v;
-        auto sv1 = str(v1), sv2 = str(v2), si = str(i), sv3 = str(v3);
-
-        vm[i4(v1, v2)] = flag.vtx_index(
+      for (auto v3 : f) {
+        flag.add_vertex(
+            i4(v1, v2),
             oneThird(poly.vertexes[v1],
                      poly.vertexes[v2])); // new v in face, 1/3rd along edge
 
-        auto fname = i4(i, 'f', v2);
-        mp[i4(i)][i4(v1, v2)] = i4(v2, v3); // five new flags
-
-        mp[fname][i4(v1, v2)] = i4(v2, v1);
-        mp[fname][i4(v2, v1)] = i4(v2);
-        mp[fname][i4(v2)] = i4(v2, v3);
-        mp[fname][i4(v2, v3)] = i4(v1, v2);
+        flag.add_face(i4(i), i4(v1, v2), i4(v2, v3)); // five new flags
+        flag.add_face({i4(v1, v2), i4(v2, v1), i4(v2), i4(v2, v3)});
 
         // shift over one
         v1 = v2;
         v2 = v3;
       }
-    }
+    });
 
-    return flag.to_poly("p" + poly.name);
+    flag.combine(flags);
+    return {"p" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Reflection
   // ------------------------------------------------------
   // geometric reflection through origin
   static Polyhedron reflect(Polyhedron &poly) {
-
     // reflect each point through origin
-    for (size_t i = 0; i < poly.n_vertex; i++)
+    Thread(poly.n_vertex).run([&poly](int i) {
       poly.vertexes[i] = -poly.vertexes[i];
+    });
 
     // repair clockwise-ness of faces
-    for (size_t i = 0; i < poly.n_faces; i++)
+    Thread(poly.n_faces).run([&poly](int i) {
       reverse(poly.faces[i].begin(), poly.faces[i].end());
+    });
 
     poly.name = "r" + poly.name;
     return poly;
@@ -258,47 +252,39 @@ public:
   // centroids.
   //
   static Polyhedron dual(Polyhedron &poly) {
-    Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
 
-    map<Flag::Int4, int> face; // make table of face as fn of edge
-
-    for (int i = 0; i < poly.n_faces; i++) {
-      auto &f = poly.faces[i];
-      auto v1 = f.back(); // previous vertex index
-      for (auto v2 : f) {
-        face[i4(v1, v2)] = i;
-        v1 = v2; // current becomes previous
-      }
-    }
-
+    auto face_map = Flag::gen_face_map(poly);
     auto centers = poly.get_centers();
-    for (int i = 0; i < poly.n_faces; i++)
-      vm[i4(i)] = flag.vtx_index(centers[i]);
+    vector<Flag> flags(Thread::getnthreads()); // one flag per thread
 
-    for (int i = 0; i < poly.n_faces; i++) {
-      auto &f = poly.faces[i];
-      auto v1 = f.back(); // previous vertex
-      for (auto &v2 : f) {
-        mp[i4(v1)][i4(face[i4(v2, v1)])] = i4(i);
-        v1 = v2; // current becomes previous
-      }
-    }
+    Thread(poly.n_faces)
+        .run([&flags, &centers, &face_map, &poly](int t, int i) {
+          Flag &flag = flags[t];
+          auto &f = poly.faces[i];
+          auto v1 = f.back(); // previous vertex
+          flag.add_vertex(i4(i), centers[i]);
+          for (auto v2 : f) {
+            flag.add_face(i4(v1), Flag::Int4int::find(face_map, i4(v2, v1)),
+                          i4(i));
+            v1 = v2; // current becomes previous
+          }
+        });
 
     auto &pn = poly.name;
     auto name = (pn[0] != 'd') ? "d" + pn : pn.substr(1, string::npos);
-    return flag.to_poly(name); // build topological dual from flags
+
+    Flag flag(flags);
+    return {name, flag.vertexes, flag.faces};
   }
 
   // Chamfer
   // ----------------------------------------------------
   // A truncation along a polyhedron's edges.
   // Chamfering or edge-truncation is similar to expansion, moving faces apart
-  // and outward, but also maintains the original vertices. Adds a new hexagonal
-  // face in place of each original edge. A polyhedron with e edges will have a
-  // chamfered form containing 2e new vertices, 3e new edges, and e new
-  // hexagonal faces. -- Wikipedia See also
+  // and outward, but also maintains the original vertices. Adds a new
+  // hexagonal face in place of each original edge. A polyhedron with e edges
+  // will have a chamfered form containing 2e new vertices, 3e new edges, and
+  // e new hexagonal faces. -- Wikipedia See also
   // http://dmccooey.com/polyhedra/Chamfer.html
   //
   // The dist parameter could control how deeply to chamfer.
@@ -311,15 +297,15 @@ public:
   // cC = t4daC = t4jC, cO = t3daO, cD = t5daD, cI = t3daI
   // But it doesn't work for cases like T.
 
-  static Polyhedron chamfer(Polyhedron &poly, float dist = 0.5) {
-    Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
+  static Polyhedron chamfer(Polyhedron &poly, float dist = 0.05) {
 
+    int nth = Thread::getnthreads();
+    vector<Flag> flags(nth);
     auto normals = poly.get_normals();
 
     // For each face f in the original poly
-    for (size_t i = 0; i < poly.n_faces; i++) {
+    Thread(poly.n_faces).run([&poly, &flags, dist, &normals](int t, int i) {
+      auto &flag = flags[t];
       auto &f = poly.faces[i];
       auto v1 = f.back();
       auto v1new = i4(i, v1);
@@ -327,29 +313,29 @@ public:
       for (auto &v2 : f) {
         // TODO: figure out what distances will give us a planar hex face.
         // Move each old vertex further from the origin.
-        vm[i4(v2)] = flag.vtx_index((1.0f + dist) * poly.vertexes[v2]);
+        flag.add_vertex(i4(v2), (1.0f + dist) * poly.vertexes[v2]);
         // Add a new vertex, moved parallel to normal.
         auto v2new = i4(i, v2);
 
-        vm[v2new] =
-            flag.vtx_index(poly.vertexes[v2] + (dist * 1.5f * normals[i]));
+        flag.add_vertex(v2new, poly.vertexes[v2] + (dist * 1.5f * normals[i]));
 
         // Four new flags:
         // One whose face corresponds to the original face:
-        mp[i4('orig', i)][v1new] = v2new;
+        flag.add_face(i4('orig', i), v1new, v2new);
 
         // And three for the edges of the new hexagon:
         auto facename = v1 < v2 ? i4('hex', v1, v2) : i4('hex', v2, v1);
-        mp[facename][i4(v2)] = v2new;
-        mp[facename][v2new] = v1new;
-        mp[facename][v1new] = i4(v1);
+        flag.add_face(facename, i4(v2), v2new);
+        flag.add_face(facename, v2new, v1new);
+        flag.add_face(facename, v1new, i4(v1));
 
         v1 = v2;
         v1new = v2new;
       }
-    }
+    });
 
-    return flag.to_poly("c" + poly.name);
+    Flag flag(flags);
+    return {"c" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Whirl
@@ -358,27 +344,26 @@ public:
   // This create 2 new hexagons for every original edge.
   // (https://en.wikipedia.org/wiki/Conway_polyhedron_notation#Operations_on_polyhedra)
   //
-  // Possible extension: take a parameter n that means only whirl n-sided faces.
-  // If we do that, the flags marked #* below will need to have their other
-  // sides filled in one way or another, depending on whether the adjacent face
-  // is whirled or not.
+  // Possible extension: take a parameter n that means only whirl n-sided
+  // faces. If we do that, the flags marked #* below will need to have their
+  // other sides filled in one way or another, depending on whether the
+  // adjacent face is whirled or not.
 
   static Polyhedron whirl(Polyhedron &poly, int n = 0) {
     (void)n;
 
-    Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
-
-    flag.add_vertexes(poly.vertexes);
+    int nth = Thread::getnthreads();
+    vector<Flag> flags(nth);
+    Flag flag(poly.vertexes);
 
     // new vertices around center of each face
     auto centers = poly.get_centers();
 
-    for (size_t i = 0; i < poly.n_faces; i++) {
+    Thread(poly.n_faces).run([&poly, &flags, &centers](int t, int i) {
+      auto &flag = flags[t];
       auto &f = poly.faces[i];
       auto flen = f.size();
-      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2] = f.slice(-2);
+      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2,f.slice(-2);
 
       for (size_t j = 0; j < flen; j++) {
         auto v = f[j];
@@ -386,32 +371,29 @@ public:
 
         // New vertex along edge
         auto v1_2 = oneThird(poly.vertexes[v1], poly.vertexes[v2]);
-        vm[i4(v1, v2)] = flag.vtx_index(v1_2);
+        flag.add_vertex(i4(v1, v2), v1_2);
         // New vertices near center of face
 
         auto cv1name = i4('cntr', i, v1);
         auto cv2name = i4('cntr', i, v2);
 
-        vm[cv1name] = flag.vtx_index(unit(oneThird(centers[i], v1_2)));
+        flag.add_vertex(cv1name, unit(oneThird(centers[i], v1_2)));
 
-        auto fname = i4(i, 'f', v1);
+        //        auto fname = i4(i, 'f', v1);
         // New hexagon for each original edge
-        mp[fname][cv1name] = i4(v1, v2);
-        mp[fname][i4(v1, v2)] = i4(v2, v1);
-        mp[fname][i4(v2, v1)] = i4(v2);
-        mp[fname][i4(v2)] = i4(v2, v3);
-        mp[fname][i4(v2, v3)] = cv2name;
-        mp[fname][cv2name] = cv1name;
+        flag.add_face(
+            {cv1name, i4(v1, v2), i4(v2, v1), i4(v2), i4(v2, v3), cv2name});
 
         // New face in center of each old face
-        mp[i4('c', i)][cv1name] = cv2name;
+        flag.add_face(i4('c', i), cv1name, cv2name);
 
-        v1 = v2;
+        v1 = v2; // shift over one
         v2 = v3;
       }
-    } // shift over one
+    });
 
-    return flag.to_poly("w" + poly.name);
+    flag.combine(flags);
+    return {"w" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Quinto
@@ -419,55 +401,42 @@ public:
   // This creates a pentagon for every point in the original face, as well as
   // one new inset face.
   static Polyhedron quinto(Polyhedron &poly) {
-    Flag flag;
-    auto &vm = flag.vi4v;
+
+    vector<Flag> flags(Thread::getnthreads());
 
     auto centers = poly.get_centers();
 
-    // create vertex map
-    for (int nface = 0; nface < poly.n_faces; nface++) {
+    Thread(poly.n_faces).run([&flags, &poly, &centers](int t, int nface) {
+      Flag &flag = flags[t];
+
+      // For each face f in the original poly
+
       auto &f = poly.faces[nface];
       auto flen = f.size();
-      auto centroid = centers[nface];
+      auto &centroid = centers[nface];
 
       // walk over face vertex-triplets
-      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2] = f.slice(-2);
+      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2,f.slice(-2);
 
-      for (auto v3 : f) {
-        // for each face-corner, we make two new points:
-        Vertex midpt = midpoint(poly.vertexes[v1], poly.vertexes[v2]),
-               innerpt = midpoint(midpt, centroid);
-
-        vm[i4_min(v1, v2)] = flag.vtx_index(midpt);
-        vm[i4_min(nface, v1, v2)] = flag.vtx_index(innerpt);
-
-        // and add the old corner-vertex
-        vm[i4(v2)] = flag.vtx_index(poly.vertexes[v2]);
-
-        // shift over one
-        v1 = v2;
-        v2 = v3;
-      }
-    }
-    flag.index_vertexes();
-
-    // For each face f in the original poly
-    for (int nface = 0; nface < poly.n_faces; nface++) {
-      auto &f = poly.faces[nface];
-      auto flen = f.size();
-
-      // walk over face vertex-triplets
-      auto v1 = f[flen - 2], v2 = f[flen - 1]; //  [v1, v2] = f.slice(-2);
-
-      vector<Flag::Int4> vi4;
-
+      vector<Int4> vi4;
       for (auto v3 : f) {
         auto t12 = i4_min(v1, v2), ti12 = i4_min(nface, v1, v2),
              t23 = i4_min(v2, v3), ti23 = i4_min(nface, v2, v3), iv2 = i4(v2);
 
+        // for each face-corner, we make two new points:
+        Vertex midpt = midpoint(poly.vertexes[v1], poly.vertexes[v2]),
+               innerpt = midpoint(midpt, centroid);
+
+        flag.add_vertex(t12, midpt);
+        flag.add_vertex(ti12, innerpt);
+
+        // and add the old corner-vertex
+        flag.add_vertex(iv2, poly.vertexes[v2]);
+
         // pentagon for each vertex in original face
+
         flag.add_face({ti12, t12, iv2, t23, ti23});
- 
+
         // inner rotated face of same vertex-number as original
         vi4.push_back(ti12);
 
@@ -475,76 +444,67 @@ public:
         v1 = v2;
         v2 = v3;
       }
-
       flag.add_face(vi4);
-    }
+    });
 
-    return Polyhedron("q" + poly.name, flag.vertexes, flag.faces);
+    //    Flag flag(flags);
+    Flag flag;
+    flag.combine(flags);
+    return {"q" + poly.name, flag.vertexes, flag.faces};
   }
 
   // inset / extrude / "Loft" operator
   // ------------------------------------------------------
-  static Polyhedron insetN(Polyhedron &poly, int n = 0, float inset_dist = 0.5,
-                           float popout_dist = -0.2f) {
+  static Polyhedron insetN(Polyhedron &poly, int n = 0, float inset_dist = 0.3f,
+                           float popout_dist = -0.1f) {
 
-    Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
-
-    flag.add_vertexes(poly.vertexes);
+    Flag flag(poly.vertexes);
+    vector<Flag> flags(Thread::getnthreads());
 
     auto normals = poly.get_normals();
     auto centers = poly.get_centers();
 
-    for (size_t i = 0; i < poly.n_faces;
-         i++) { // new inset vertex for every vert in face
-      auto &f = poly.faces[i];
-      if (f.size() == n || n == 0) {
-        for (auto &v : f) {
-          vm[i4('f', i, v)] =
-              flag.vtx_index(tween(poly.vertexes[v], centers[i], inset_dist) +
-                             (popout_dist * normals[i]));
-        }
-      }
-    }
-
     bool foundAny = false; // alert if don't find any
-    for (size_t i = 0; i < poly.n_faces; i++) {
-      auto f = poly.faces[i];
-      auto v1 = f.back();
+    Thread(poly.n_faces)
+        .run([&flags, &poly, &foundAny, inset_dist, popout_dist, &centers, n,
+              &normals](int t, int i) {
+          Flag &flag = flags[t];
+          auto f = poly.faces[i];
+          auto v1 = f.back();
 
-      for (auto &v : f) {
-        auto v2 = v;
+          for (auto &v : f) {
+            auto v2 = v;
 
-        if (f.size() == n || n == 0) {
-          foundAny = true;
-          auto fname = i4(i, v1);
-          mp[fname][i4(v1)] = i4(v2);
-          mp[fname][i4(v2)] = i4('f', i, v2);
-          mp[fname][i4('f', i, v2)] = i4('f', i, v1);
-          mp[fname][i4('f', i, v1)] = i4(v1);
-          // new inset, extruded face
-          mp[i4('ex', i)][i4('f', i, v1)] = i4('f', i, v2);
-        } else {
-          mp[i4(i)][i4(v1)] = i4(v2);
-          // same old flag, if non-n
-        }
+            if (f.size() == n || n == 0) {
+              foundAny = true;
 
-        v1 = v2;
-      }
-    } // current becomes previous
+              flag.add_vertex(i4('f', i, v),
+                              tween(poly.vertexes[v], centers[i], inset_dist) +
+                                  (popout_dist * normals[i]));
+
+              flag.add_face({i4(v1), i4(v2), i4('f', i, v2), i4('f', i, v1)});
+              // new inset, extruded face
+              flag.add_face(i4('ex', i), i4('f', i, v1), i4('f', i, v2));
+            } else {
+              flag.add_face(i4(i), i4(v1), i4(v2)); // same old flag, if non-n
+            }
+
+            v1 = v2; // current becomes previous
+          }
+        });
 
     if (!foundAny)
       printf("No %d - fold components were found.", n);
 
-    return flag.to_poly("n" + (n ? str(n) : "") + poly.name);
+    flag.combine(flags);
+    return {"n" + (n ? str(n) : "") + poly.name, flag.vertexes, flag.faces};
   }
 
   // extrudeN
   // ------------------------------------------------------
   // for compatibility with older operator spec
   static Polyhedron extrudeN(Polyhedron &poly, int n = 0) {
-    auto newpoly = insetN(poly, n, 0.0, 0.3);
+    auto newpoly = insetN(poly, n, 0.0, 0.1);
     newpoly.name = "x" + (n ? str(n) : "") + poly.name;
     return newpoly;
   }
@@ -563,53 +523,37 @@ public:
   static Polyhedron hollow(Polyhedron &poly, float inset_dist = 0.2,
                            float thickness = 0.1) {
 
-    Flag flag;
-    auto &vm = flag.vi4v;
+    Flag flag(poly.vertexes);
+    vector<Flag> flags(Thread::getnthreads());
 
-    auto dualnormals = PolyOperations::dual(poly).avg_normals();
     auto normals = poly.avg_normals();
     auto centers = poly.get_centers();
-    auto &vertexes = poly.vertexes;
 
-    // create vertex map v[t]=v
+    Thread(poly.n_faces)
+        .run([&flags, &poly, inset_dist, thickness, &centers, &normals](int t,
+                                                                        int i) {
+          Flag &flag = flags[t];
+          auto v1 = poly.faces[i].back();
 
-    for (size_t i = 0; i < poly.n_vertex;
-         i++) { // each old vertex is a new vertex
-      auto &p = vertexes[i];
-      vm[i4('v', i)] = flag.vtx_index(p);
-      vm[i4('down', i)] = flag.vtx_index(p - thickness * dualnormals[i]);
-    }
+          for (auto &v2 : poly.faces[i]) {
+            // new inset vertex for every vert in face
+            flag.add_vertex(i4('fin', i, 'v', v2),
+                            tween(poly.vertexes[v2], centers[i], inset_dist));
+            flag.add_vertex(i4('fdwn', i, 'v', v2),
+                            tween(poly.vertexes[v2], centers[i], inset_dist) -
+                                (thickness * normals[i]));
 
-    // new inset vertex for every vert in face
-    for (size_t i = 0; i < poly.n_faces; i++) {
-      for (auto &v : poly.faces[i]) {
-        vm[i4('fin', i, 'v', v)] =
-            flag.vtx_index(tween(vertexes[v], centers[i], inset_dist));
-        vm[i4('fdwn', i, 'v', v)] =
-            flag.vtx_index(tween(vertexes[v], centers[i], inset_dist) -
-                           (thickness * normals[i]));
-      }
-    }
-    flag.index_vertexes(); // create indexed vertex array -> flag.vertexes
+            flag.add_face(
+                {i4(v1), i4(v2), i4('fin', i, 'v', v2), i4('fin', i, 'v', v1)});
 
-    // create face map f[t][f]=t;
+            flag.add_face({i4('fin', i, 'v', v1), i4('fin', i, 'v', v2),
+                           i4('fdwn', i, 'v', v2), i4('fdwn', i, 'v', v1)});
+            v1 = v2; // current becomes previous
+          }
+        });
 
-    for (size_t i = 0; i < poly.n_faces; i++) {
-      auto &fcs = poly.faces[i];
-      auto v1 = fcs.back();
-
-      for (auto &v2 : fcs) {
-        flag.add_face({i4('v', v1), i4('v', v2), i4('fin', i, 'v', v2),
-                       i4('fin', i, 'v', v1)});
-
-        flag.add_face({i4('fin', i, 'v', v1), i4('fin', i, 'v', v2),
-                       i4('fdwn', i, 'v', v2), i4('fdwn', i, 'v', v1)});
-
-        v1 = v2; // current becomes previous
-      }
-    }
-
-    return Polyhedron("H" + poly.name, flag.vertexes, flag.faces);
+    flag.combine(flags);
+    return {"H" + poly.name, flag.vertexes, flag.faces};
   }
 
   // Perspectiva 1
@@ -619,62 +563,60 @@ public:
     auto centers = poly.get_centers(); // calculate face centers
 
     Flag flag;
-    auto &mp = flag.map4;
-    auto &vm = flag.vi4v;
-
-    flag.add_vertexes(poly.vertexes);
+    vector<Flag> flags(Thread::getnthreads());
+    flag.set_vertexes(poly.vertexes);
 
     // iterate over triplets of faces v1,v2,v3
-    for (size_t i = 0; i < poly.n_faces; i++) {
+    Thread(poly.n_faces).run([&flags, &poly, &centers](int t, int i) {
+      Flag &flag = flags[t];
       auto &f = poly.faces[i];
       auto flen = f.size();
       auto v1 = f[flen - 2], v2 = f[flen - 1];
       auto vert1 = poly.vertexes[v1], vert2 = poly.vertexes[v2];
 
+      vector<Int4> vi4;
       for (auto &v3 : f) {
 
         auto vert3 = poly.vertexes[v3];
-        auto v12 = i4(v1, '~', v2); // names for "oriented" midpoints
-        auto v21 = i4(v2, '~', v1);
-        auto v23 = i4(v2, '~', v3);
+        auto v12 = i4(v1, v2); // names for "oriented" midpoints
+        auto v21 = i4(v2, v1);
+        auto v23 = i4(v2, v3);
 
-        // on each Nface, N new points inset from edge midpoints towards center
-        // = "stellated" points
-        vm[v12] = flag.vtx_index(midpoint(midpoint(vert1, vert2), centers[i]));
+        // on each Nface, N new points inset from edge midpoints towards
+        // center = "stellated" points
+        flag.add_vertex(v12, midpoint(midpoint(vert1, vert2), centers[i]));
 
         // inset Nface made of new, stellated points
-        mp[i4('in', i)][v12] = v23;
+        vi4.push_back(v12);
 
         // new tri face constituting the remainder of the stellated Nface
-        auto fname = i4('f', i, v2);
-        mp[fname][v23] = v12;
-        mp[fname][v12] = i4(v2);
-        mp[fname][i4(v2)] = v23;
+        flag.add_face({v23, v12, i4(v2)});
 
         // one of the two new triangles replacing old edge between v1->v2
-        fname = i4('f', v1, '~', v2);
-        mp[fname][i4(v1)] = v21;
-        mp[fname][v21] = v12;
-        mp[fname][v12] = i4(v1);
+        flag.add_face({i4(v1), v21, v12});
 
         v1 = v2;
-        v2 = v3; //  [v1, v2] = [v2, v3];  // current becomes previous
+        v2 = v3; //  [v1, v2,[v2, v3];  // current becomes previous
 
         vert1 = vert2;
-        vert2 = vert3; // [vert1, vert2] = [vert2, vert3];
+        vert2 = vert3; // [vert1, vert2,[vert2, vert3];
       }
-    }
+      flag.add_face(vi4);
+    });
 
-    return flag.to_poly("P" + poly.name);
+    flag.combine(flags);
+    return {"P" + poly.name, flag.vertexes, flag.faces};
   }
+
   //===================================================================================================
   // Goldberg-Coxeter Operators  (in progress...)
   //===================================================================================================
 
   // Triangular Subdivision Operator
   // ----------------------------------------------------------------------------------------------
-  // limited version of the Goldberg-Coxeter u_n operator for triangular meshes
-  // We subdivide manually here, instead of using the usual flag machinery.
+  // limited version of the Goldberg-Coxeter u_n operator for triangular
+  // meshes We subdivide manually here, instead of using the usual flag
+  // machinery.
   static Polyhedron trisub(Polyhedron &poly, int n = 2) {
 
     for (size_t fn = 0; fn < poly.n_faces;
@@ -691,7 +633,7 @@ public:
       auto &f = poly.faces[fn];
       auto flen = f.size();
       auto i1 = f[flen - 3], i2 = f[flen - 2],
-           i3 = f[flen - 1]; // let [i1, i2, i3] = f.slice(-3);
+           i3 = f[flen - 1]; // let [i1, i2, i3,f.slice(-3);
       auto v1 = poly.vertexes[i1], v2 = poly.vertexes[i2],
            v3 = poly.vertexes[i3];
       auto v21 = v2 - v1;

@@ -15,7 +15,7 @@ void gl01_widget::draw() {
 void gl01_widget::draw_poly() {
   if (poly) {
     int ixf = 0;
-    for (auto face : poly->faces) {
+    for (auto &face : poly->faces) {
       glBegin(GL_POLYGON);
 
       auto color = poly->get_color(ixf);
@@ -35,16 +35,16 @@ void gl01_widget::draw_poly() {
 }
 
 void gl01_widget::draw_lines() {
-    for (auto face : poly->faces) {
-      glBegin(GL_LINES);
-      glColor3f(0,0,0);
+  for (auto &face : poly->faces) {
+    glBegin(GL_LINES);
+    glColor3f(0, 0, 0);
 
-      for (auto ix_coord : face) {
-        auto v = poly->vertexes[size_t(ix_coord)];
-        glVertex3f(v.x, v.y, v.z);
-      }
-      glEnd();
+    for (auto ix_coord : face) {
+      auto v = poly->vertexes[size_t(ix_coord)];
+      glVertex3f(v.x, v.y, v.z);
     }
+    glEnd();
+  }
 }
 
 void gl01_widget::set_poly(Polyhedron *poly) {

@@ -4,105 +4,250 @@
 #include "common.hpp"
 #include "polyhedron.hpp"
 
-class FastFlags {
+class Flag {
 public:
-  typedef pair<int, Vertex> VertexIndex;
-  typedef tuple<int, int, int, int> Int4;
-  typedef map<int, VertexIndex> IntVertex;
+  Vertexes vertexes;
+  Faces faces;
 
-  FastFlags() {}
-  FastFlags(Vertexes vertexes) : vertexes(vertexes) {}
+  vector<I4Vix> v;
+  vector<MapIndex> m; // m[i4][i4]=i4 -> m[]<<i4,i4,i4
+  vector<vector<Int4>> fcs;
 
-  int add_vertex(Vertex v) {
+  int v_index = 0; // index of last added vertex (add_vertex)
+
+  Flag() = default;
+  Flag(vector<Flag> &flags) { // consolidate flags -> flag
+    combine(flags);
+  }
+
+  Flag(Vertexes &vertexes) { // consolidate flags -> flag
+    set_vertexes(vertexes);
+  }
+
+  void combine(vector<Flag> &flags) { // combine flags(v,m,fcs) -> flag
+
+    // totalize v, fcs -> calc offsets
+    int vs = v.size(), v_tot = vs, f_tot = 0,
+        m_tot = 0; // v may contain vertex
+    vector<int> v_offsets{0}, fcs_offsets{0}, m_offsets{0};
+
+    v_offsets[0] = vs;
+
+    for (auto &f : flags) {
+      v_offsets.push_back(v_tot += f.v.size());
+      fcs_offsets.push_back(f_tot += f.fcs.size());
+      m_offsets.push_back(m_tot += f.m.size());
+    }
+
+    // resize v,m to total required space
+    v.resize(v_tot + v.size());
+    m.resize(m_tot);
+
+    // copy threaded flag.v,m,fcs << flags[].v,m,fcs
+    Thread(flags.size())
+        .run([this, &flags, &v_offsets,
+              &m_offsets](int nflag) { // combine (v,m) flags[] -> flag
+          copy(flags[nflag].v.begin(), flags[nflag].v.end(),
+               &v[v_offsets[nflag]]);
+          copy(flags[nflag].m.begin(), flags[nflag].m.end(),
+               &m[m_offsets[nflag]]);
+        });
+
+    index_vertexes(); // numerate 'v', v->vertexes
+
+    process_m(); // faces << m
+
+    // faces << fcs
+    int fs_m = faces.size();
+    faces.resize(f_tot + fs_m);
+
+    Thread(flags.size()).run([this, &flags, &fcs_offsets, fs_m](int t) {
+      int offset = fcs_offsets[t] + fs_m;
+      for (auto &fc : flags[t].fcs) {
+        Face face;
+        for (auto &vix : fc)
+          face.push_back(find_vertex_index(vix));
+        faces[offset++] = face;
+      }
+    });
+  }
+
+  inline int add_vertex(Vertex v) {
     vertexes.push_back(v);
     return vertexes.size() - 1;
   }
 
-  VertexIndex vtx_index(Vertex v) { return VertexIndex(0, v); }
+  void sort_unique_v() { // fastest solution
+    sort(v.begin(), v.end(), [](I4Vix &a, I4Vix &b) -> bool { return a < b; });
 
-  static inline Int4 to_int4(int v) { return Int4(v + 1, 0, 0, 0); }
-  static inline Int4 to_int4(int v1, int v2) {
-    return Int4(v1 + 1, v2 + 1, 0, 0);
-  }
-  static inline Int4 to_int4(int v1, int v2, int v3) {
-    return Int4(v1 + 1, v2 + 1, v3 + 1, 0);
-  }
-  static inline Int4 to_int4(int v1, int v2, int v3, int v4) {
-    return Int4(v1 + 1, v2 + 1, v3 + 1, v4 + 1);
+    const auto &it = unique(v.begin(), v.end(),
+                            [](I4Vix &a, I4Vix &b) -> bool { return a == b; });
+    v.resize(std::distance(v.begin(), it));
+    // unique ordered set of vectors
+    //    v.erase(
+    //        unique(v.begin(), v.end(),
+    //               [](I4Vix &a, I4Vix &b) -> bool { return a.first == b.first;
+    //               }),
+    //        v.end());
   }
 
-  Polyhedron to_poly(string name) { // mapi4i4i4, vi4v
+  //  void sort_unique_v_unsortedsets() {
+  //    struct I4VixComparator {
+  //      bool operator()(const I4Vix &a, const I4Vix &b) const {
+  //        return a.first == b.first;
+  //      }
+  //    };
+  //    struct I4VixHash {
+  //      inline size_t hash_combiner(size_t left, size_t right) const {
+  //        return left + 0x9e3779b9 + (right << 6) + (right >> 2);
+  //      }
+  //      size_t operator()(const I4Vix &v) const {
+  //        Int4 i4 = v.first;
+  //        return hash_combiner(i4[0], i4[1]);
+  //      }
+  //    };
+
+  //    std::unordered_set<I4Vix, I4VixHash, I4VixComparator> s;
+  //    s.insert(v.begin(), v.end());
+  //    v.assign(s.begin(), s.end());
+  //    sort(v.begin(), v.end(),
+  //         [](I4Vix &a, I4Vix &b) -> bool { return a.first < b.first; });
+  //  }
+
+  //  void sort_unique_v_sets() { // better than unordered
+  //    auto comp = [](const I4Vix &a, const I4Vix &b) {
+  //      return a.first < b.first;
+  //    };
+  //    std::set<I4Vix, decltype(comp)> s(comp);
+  //    s.insert(v.begin(), v.end());
+  //    v.assign(s.begin(), s.end());
+  //  }
+
+  void index_vertexes() { // v, numerate vertexes index & create vertexes[]
+    sort_unique_v();
+    vertexes.resize(v.size()); // numerate & create vertexes[]
+
+    Thread(v.size()).run([this](int i) {
+      VertexIndex &_v = v[i].vix; // <index, vertex>
+      _v.index = i;
+      vertexes[i] = _v.vertex;
+    });
+  }
+
+  int set_vertexes(Vertexes &vertexes) { // v = vertexes
+    v.resize(vertexes.size());
+    Thread(vertexes.size()).run([this, &vertexes](int i) {
+      v[i] = {to_int4(i), {0, vertexes[i]}};
+    });
+    return vertexes.size();
+  }
+
+  inline void add_face(Int4 i0, Int4 i1, Int4 i2) { m.push_back({i0, i1, i2}); }
+  inline void add_face(vector<Int4> v) { fcs.push_back(v); }
+
+  inline void add_vertex(Int4 ix, Vertex vtx) { // to v
+    v.push_back({ix, {v_index++, vtx}});
+  }
+
+  inline int set_vertex(int i, Int4 ix, Vertex vtx) {
+    v[i] = {ix, {0, vtx}};
+    return i;
+  }
+
+  inline I4Vix find_vertex(Int4 _v) {
+    return *lower_bound(v.begin(), v.end(), _v, I4Vix::less);
+  }
+
+  inline int find_vertex_index(Int4 _v) {
+    return lower_bound(v.begin(), v.end(), _v, I4Vix::less)->vix.index;
+  }
+
+  inline Int4 find_m(Int4 _m0, Int4 _m1) {
+    return (*lower_bound(m.begin(), m.end(), MapIndex(_m0, _m1, 0))).i2;
+  }
+
+  // gen. vector of from index of face change in m
+  vector<int> from_to_m() {
+    vector<int> v_ft;
+    Int4 c0 = m[0].i0;
+    int from = 0;
+
+    for (int i = 0; i < m.size(); i++) {
+      if (m[i].i0 != c0) {
+        v_ft.push_back(from);
+        from = i;
+        c0 = m[i].i0;
+      }
+    }
+    v_ft.push_back(from);
+
+    return v_ft;
+  }
+
+  void to_poly() { // v,m -> vertexes, faces
 
     index_vertexes();
 
     faces.clear();
 
-    for (auto &m0 : map4) {
-      Int4 v0 = m0.second.begin()->second, v = v0;
-      Face face;
-
-      do {
-        face.push_back(vi4v[v].first); // vertex index
-        v = m0.second[v];
-      } while (v != v0);
-
-      faces.push_back(face);
-    }
-
-    vi4v.clear();
-    map4.clear();
-
-    return Polyhedron(name, vertexes, faces);
+    process_m();
   }
 
-  Vertexes vertexes;
-  Faces faces;
+  void process_m() { // m->faces
+    if (!m.empty()) {
+      // sort m
+      sort(m.begin(), m.end(), MapIndex::less);
 
-  map<Int4, FastFlags::VertexIndex> vi4v;
-  map<Int4, map<Int4, Int4>> map4;
+      auto ft = from_to_m(); // from index in m (segments of i0)
+      faces = Faces(ft.size());
 
-  void index_vertexes() { // vi4v
-    int i = 0;            // numerate vertexes index & create vertexes[]
-    vertexes.clear();
-    for (auto &v : vi4v) {
-      v.second.first = i++;
-      vertexes.push_back(v.second.second);
+      Thread(ft.size()).run([this, &ft](int fti) {
+        int i = ft[fti];
+
+        auto &m0 = m[i];
+        Int4 _v0 = m0.i2, _v = _v0, _m0 = m0.i0;
+
+        // traverse _m0
+        Face face;
+        do {
+          face.push_back(find_vertex_index(_v));
+          _v = find_m(_m0, _v);
+        } while (_v != _v0);
+
+        faces[fti] = face;
+      });
     }
   }
 
-  void add_face(vector<Int4> vi4) {
-    Face face;
-    for (auto &i : vi4)
-      if (vi4v.find(i) == vi4v.end())
-        printf("add_face: index not found (%d, %d, %d, %d)\n", std::get<0>(i),
-               std::get<1>(i), std::get<2>(i), std::get<3>(i));
-      else
-        face.push_back(vi4v[i].first);
-    faces.push_back(face);
-  }
+  struct Int4int { // face map
+    Int4 _i4;
+    int i;
+    bool operator<(const Int4int &o) const { return _i4 < o._i4; }
+    bool operator<(const Int4 &o) const { return _i4 < o; }
+    bool operator()(const Int4int &a, const Int4 &b) const { return a._i4 < b; }
+    static Int4 find(const vector<Int4int> &iv, Int4 k) {
+      return i4(lower_bound(iv.begin(), iv.end(), k)->i);
+    }
+    static void sort(vector<Int4int> &iv) { std::sort(iv.begin(), iv.end()); }
+  };
 
-  int add_vertexes(Vertexes &vertexes) { // vi4v << vertexes
-    for (int i = 0; i < vertexes.size(); i++)
-      vi4v[to_int4(i)] = vtx_index(vertexes[i]);
-    return vertexes.size();
+  static vector<Int4int> gen_face_map(Polyhedron &poly) {
+    // make table of face as fn of edge
+
+    vector<Int4int> face_map;
+
+    for (int i = 0; i < poly.n_faces; i++) {
+      auto &f = poly.faces[i];
+      auto v1 = f.back(); // previous vertex index
+      for (auto v2 : f) {
+        face_map.push_back({i4(v1, v2), i});
+        v1 = v2; // current becomes previous
+      }
+    }
+    Int4int::sort(face_map);
+
+    return face_map;
   }
 };
 
-static inline FastFlags::Int4 i4(int v1) { return FastFlags::to_int4(v1); }
-static inline FastFlags::Int4 i4(int v1, int v2) {
-  return FastFlags::to_int4(v1, v2);
-}
-static inline FastFlags::Int4 i4(int v1, int v2, int v3) {
-  return FastFlags::to_int4(v1, v2, v3);
-}
-static inline FastFlags::Int4 i4(int v1, int v2, int v3, int v4) {
-  return FastFlags::to_int4(v1, v2, v3, v4);
-}
-
-static inline FastFlags::Int4 i4_min(int v1, int v2) {
-  return v1 < v2 ? i4(v1, v2) : i4(v2, v1);
-}
-static inline FastFlags::Int4 i4_min(int i, int v1, int v2) {
-  return v1 < v2 ? i4(i, v1, v2) : i4(i, v2, v1);
-}
 #endif // FASTFLAGS_H

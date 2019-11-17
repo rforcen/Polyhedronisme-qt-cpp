@@ -10,7 +10,7 @@
 #define johnson_hpp
 
 #include "common.hpp"
-typedef pair<Faces, VertexesFloat> FacesVertexes;
+typedef pair<vector<vector<int>>, VertexesFloat> FacesVertexes;
 typedef map<int, FacesVertexes> Johnsons;
 
 extern Johnsons johnsons;

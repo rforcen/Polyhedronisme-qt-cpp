@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "Timer.h"
 #include "ui_mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent)
@@ -16,17 +17,21 @@ void MainWindow::showEvent(QShowEvent *) {
 }
 
 void MainWindow::update() {
+
   if (!ui->poly_trans->text().isEmpty()) {
-    p = Parser::parse(ui->poly_trans->text()
-                          .toLocal8Bit()
-                          .data()); // create the poly w/user input
+    auto ts = Timer().chrono([this]() {
+      p = Parser::parse(ui->poly_trans->text()
+                            .toLocal8Bit()
+                            .data()); // create the poly w/user input
+    });
+    ui->statusbar->showMessage(QString::asprintf(
+        "# vertex: %ld, # faces: %ld, lap: %ld", p.n_vertex, p.n_faces, ts));
 
-    ui->statusbar->showMessage(QString::asprintf("# vertex: %ld, # faces: %ld",
-                                                 p.n_vertex, p.n_faces));
+    ui->shader->set_poly(&p);
+
     ui->poly_widget->set_poly(&p); // render it
-    ui->gl10->set_poly(&p); // render it
-    ui->pnt->set_poly(&p); // render it
-
+    ui->gl10->set_poly(&p);
+    ui->pnt->set_poly(&p);
   }
 }
 

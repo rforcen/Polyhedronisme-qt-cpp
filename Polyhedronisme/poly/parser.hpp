@@ -10,7 +10,7 @@
 #define parser_hpp
 
 #include "common.hpp"
-#include "poly_operations.hpp"
+#include "poly_operations_mt.hpp"
 #include "polyhedron.hpp"
 #include "seeds.hpp"
 #include <ctype.h>
@@ -19,11 +19,44 @@ class Parser {
 public:
   Parser() {}
 
+  static void test_tuple_performance() {
+
+    int n = 2e6;
+    vector<Int4> _v4;
+    vector<Int4> v4;
+    Int4 i0, i1(1), i2(1, 2), i3(1, 2, 3), i4(1, 2, 3, 4);
+
+    Timer t;
+
+    _v4.resize(n);
+    t.timer("_Int4 init");
+    v4.resize(n);
+    t.timer("Int4 init");
+
+    for (int i = 0; i < n; i++)
+      _v4[i] = Int4(rand(), rand(), rand(), rand());
+    t.timer("_Int4 fill");
+    for (int i = 0; i < n; i++)
+      v4[i] = Int4(rand(), rand(), rand(), rand());
+    t.timer("Int4 fill");
+
+    sort(_v4.begin(), _v4.end());
+    t.timer("sort _Int4");
+
+    sort(v4.begin(), v4.end());
+    t.timer("sort Int4");
+
+    printf("is sorted _v4:%d, v4:%d\n", std::is_sorted(_v4.begin(), _v4.end()),
+           std::is_sorted(v4.begin(), v4.end()));
+  }
+
   static Polyhedron parse(string s) { // ttttBN
     Polyhedron p;
     int n = 0;
     size_t slen = s.length(), i = 0;
     string sd;
+
+//    test_tuple_performance();
 
     reverse(s.begin(), s.end()); // NBtttt
 
@@ -128,8 +161,7 @@ public:
       }
     }
 
-    p.recalc();
-    return p;
+    return p.recalc();
   }
 };
 
